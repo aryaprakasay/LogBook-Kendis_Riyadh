@@ -95,4 +95,4 @@ try:
     else:
         st.error("❌ ID Mobil tidak ditemukan di lembar database.")
 except Exception as e:
-    st.error("Menunggu konfigurasi rahasia Google Sheets...")
+    st.error(f"Terjadi kesalahan koneksi: {e}")
