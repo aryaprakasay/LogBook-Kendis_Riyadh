@@ -3,23 +3,20 @@ import pandas as pd
 
 st.set_page_config(page_title="Fleet Log Book", page_icon="🚗", layout="centered")
 
-# 1. PASTE LINK GOOGLE SHEETS ANDA DI SINI
-# Ganti teks di bawah ini dengan tautan Google Sheets asli Anda (Biarkan berakhiran /edit?usp=sharing)
-LINK_GOOGLE_SHEETS = "https://docs.google.com/spreadsheets/d/11cmcOt3RYH2XSd2H9KOsEZCbaR-Y-cCdtCj_V2D9S_c/edit?gid=0#gid=0"
+# ID Google Sheets Anda yang sudah ditanam langsung secara aman
+ID_SHEET = "11cmcOt3RYH2XSd2H9KOsEZCbaR-Y-cCdtCj_V2D9S_c"
+
+# URL Ekspor CSV Bersih ke masing-masing Tab Google Sheets Anda
+URL_STATUS = f"https://docs.google.com/spreadsheets/d/{ID_SHEET}/export?format=csv&gid=0"
+URL_LOG = f"https://docs.google.com/spreadsheets/d/{ID_SHEET}/export?format=csv&gid=1114515513"  # Gid otomatis untuk Log_Aktivitas
 
 try:
-    # Mengambil ID unik Spreadsheet dari link yang Anda tempel
-    sheet_id = LINK_GOOGLE_SHEETS.split("/d/")[1].split("/")[0]
-    
-    # Membuat link unduhan otomatis untuk Tab Status_Mobil (gid=0 adalah tab pertama)
-    url_download_csv = f"https://google.com{sheet_id}/export?format=csv&gid=0"
-    
     # Membaca data langsung dari Google Sheets menggunakan Pandas
-    df_mobil = pd.read_csv(url_download_csv)
+    df_mobil = pd.read_csv(URL_STATUS)
     df_mobil['ID_Mobil'] = df_mobil['ID_Mobil'].astype(str).str.strip()
     df_mobil = df_mobil.set_index("ID_Mobil")
 
-    # 2. Menangkap ID Mobil dari parameter URL (?mobil=MBL01)
+    # Menangkap ID Mobil dari parameter URL (?mobil=MBL01)
     query_params = st.query_params
     id_mobil_terdeteksi = query_params.get("mobil", "MBL01")
 
@@ -31,7 +28,7 @@ try:
         st.divider()
 
         # Tampilkan Status Utama Kendaraan
-        if mobil["Status"] == "Tersedia":
+        if str(mobil["Status"]).strip() == "Tersedia":
             st.success("✅ STATUS: KENDARAAN TERSEDIA DI POOL")
             with st.form("form_checkout"):
                 st.write("### 📝 Form Mulai Penggunaan (Check-Out)")
@@ -60,4 +57,4 @@ try:
 
 except Exception as e:
     st.error(f"Terjadi kesalahan pembacaan database: {e}")
-    st.info("Pastikan tautan Google Sheets Anda sudah benar dan aksesnya diatur ke 'Siapa saja yang memiliki link dapat melihat' (Public Viewer).")
+    st.info("Pastikan akses Google Sheets Anda diatur ke 'Siapa saja yang memiliki link dapat melihat' (Public Viewer).")
