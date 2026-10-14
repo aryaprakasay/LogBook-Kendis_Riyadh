@@ -2,7 +2,7 @@ import streamlit as st
 import datetime
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
-from zoneinfo import ZoneInfo  # Ditambahkan untuk pengaturan zona waktu Saudi Arabia
+from zoneinfo import ZoneInfo
 
 st.set_page_config(page_title="Fleet Log Book", page_icon="🚗", layout="centered")
 
@@ -34,7 +34,7 @@ try:
                 st.write("### 📝 Form Mulai Penggunaan (Check-Out)")
                 nama_driver = st.text_input("Nama Pengendara / Driver")
                 tujuan = st.text_input("Tujuan Perjalanan")
-                km_awal = st.number_input("Kilometer (KM) Awal", min_value=int(mobil["KM_Terakhir"]), value=int(mobil["KM_Terakhir"]), step=1)
+                km_awal = st.number_input("Kilometer (KM) Awal", min_value=0, value=int(mobil["KM_Terakhir"]), step=1)
                 
                 # Menggunakan Waktu Resmi Arab Saudi (GMT+3)
                 waktu_mulai = datetime.datetime.now(ZoneInfo("Asia/Riyadh")).strftime("%Y-%m-%d %H:%M:%S")
@@ -45,14 +45,19 @@ try:
                     if nama_driver and tujuan:
                         # Tambah baris baru ke Tab Log_Aktivitas
                         df_log = conn.read(worksheet="Log_Aktivitas", ttl="0s")
+                        
                         new_log = pd.DataFrame([{
-                            "Timestamp": waktu_mulai, "ID_Mobil": id_mobil_terdeteksi, "Nama_Driver": nama_driver,
-                            "Tujuan": tujuan, "KM_Awal": int(km_awal), "Waktu_Mulai": waktu_mulai,
-                            "KM_Akhir": "", "Waktu_Selesai": "", "Total_Jarak": ""
+                            "Timestamp": waktu_mulai, 
+                            "ID_Mobil": id_mobil_terdeteksi, 
+                            "Nama_Driver": nama_driver,
+                            "Tujuan": tujuan, 
+                            "KM_Awal": int(km_awal), 
+                            "Waktu_Mulai": waktu_mulai,
+                            "KM_Akhir": None, 
+                            "Waktu_Selesai": "", 
+                            "Total_Jarak": None
                         }])
                         
-                        # Menyamakan tipe data kolom agar tidak bentrok
-                        df_log['KM_Akhir'] = df_log['KM_Akhir'].astype(str)
                         df_log_updated = pd.concat([df_log, new_log], ignore_index=True)
                         conn.update(worksheet="Log_Aktivitas", data=df_log_updated)
                         
@@ -72,7 +77,7 @@ try:
             
             with st.form("form_checkin"):
                 st.write("### 🔚 Form Selesai Penggunaan (Check-In)")
-                km_akhir = st.number_input("Kilometer (KM) Akhir", min_value=int(mobil["KM_Terakhir"]), value=int(mobil["KM_Terakhir"])+1, step=1)
+                km_akhir = st.number_input("Kilometer (KM) Akhir", min_value=0, value=int(mobil["KM_Terakhir"])+1, step=1)
                 
                 # Menggunakan Waktu Resmi Arab Saudi (GMT+3)
                 waktu_selesai = datetime.datetime.now(ZoneInfo("Asia/Riyadh")).strftime("%Y-%m-%d %H:%M:%S")
@@ -83,14 +88,18 @@ try:
                     if km_akhir >= mobil["KM_Terakhir"]:
                         jarak_tempuh = km_akhir - mobil["KM_Terakhir"]
                         
-                        # Cari baris aktif di Log_Aktivitas
+                        # Cari baris aktif di Log_Aktivitas di mana KM_Akhir masih kosong atau bernilai null
                         df_log = conn.read(worksheet="Log_Aktivitas", ttl="0s")
-                        df_log['KM_Akhir'] = df_log['KM_Akhir'].fillna("").astype(str).str.strip()
                         
-                        idx = df_log[(df_log['ID_Mobil'] == id_mobil_terdeteksi) & ((df_log['KM_Akhir'] == "") | (df_log['KM_Akhir'] == "-"))].index
+                        # Mengatasi deteksi baris kosong secara fleksibel agar tidak terjadi kesalahan dtype
+                        idx = df_log[(df_log['ID_Mobil'] == id_mobil_terdeteksi) & (df_log['KM_Akhir'].isna() | (df_log['KM_Akhir'] == "") | (df_log['KM_Akhir'] == "-"))].index
                         
                         if not idx.empty:
-                            df_log.loc[idx, ['KM_Akhir', 'Waktu_Selesai', 'Total_Jarak']] = [str(int(km_akhir)), waktu_selesai, str(int(jarak_tempuh))]
+                            # Memastikan baris target diubah menggunakan tipe data objek agar menerima angka maupun teks kosong tanpa eror
+                            df_log = df_log.astype(object)
+                            df_log.loc[idx[0], 'KM_Akhir'] = int(km_akhir)
+                            df_log.loc[idx[0], 'Waktu_Selesai'] = waktu_selesai
+                            df_log.loc[idx[0], 'Total_Jarak'] = int(jarak_tempuh)
                             conn.update(worksheet="Log_Aktivitas", data=df_log)
                         
                         # Kembalikan status mobil di Tab Status_Mobil menjadi "Tersedia"
