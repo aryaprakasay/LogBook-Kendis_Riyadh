@@ -44,16 +44,18 @@ try:
                         df_log = conn.read(worksheet="Log_Aktivitas", ttl="0s")
                         new_log = pd.DataFrame([{
                             "Timestamp": waktu_mulai, "ID_Mobil": id_mobil_terdeteksi, "Nama_Driver": nama_driver,
-                            "Tujuan": tujuan, "KM_Awal": km_awal, "Waktu_Mulai": waktu_mulai,
+                            "Tujuan": tujuan, "KM_Awal": int(km_awal), "Waktu_Mulai": waktu_mulai,
                             "KM_Akhir": "", "Waktu_Selesai": "", "Total_Jarak": ""
                         }])
+                        
+                        # Menyamakan tipe data kolom agar tidak bentrok
                         df_log['KM_Akhir'] = df_log['KM_Akhir'].astype(str)
                         df_log_updated = pd.concat([df_log, new_log], ignore_index=True)
                         conn.update(worksheet="Log_Aktivitas", data=df_log_updated)
                         
                         # Ubah status mobil di Tab Status_Mobil menjadi "Dipakai"
                         df_mobil_reset = df_mobil.reset_index()
-                        df_mobil_reset.loc[df_mobil_reset['ID_Mobil'] == id_mobil_terdeteksi, ['Status', 'Driver_Sekarang', 'KM_Terakhir']] = ["Dipakai", nama_driver, km_awal]
+                        df_mobil_reset.loc[df_mobil_reset['ID_Mobil'] == id_mobil_terdeteksi, ['Status', 'Driver_Sekarang', 'KM_Terakhir']] = ["Dipakai", nama_driver, int(km_awal)]
                         conn.update(worksheet="Status_Mobil", data=df_mobil_reset)
                         
                         st.success(f"Berhasil! Selamat bertugas {nama_driver}. Data disimpan ke Google Sheets.")
@@ -76,16 +78,19 @@ try:
                     if km_akhir >= mobil["KM_Terakhir"]:
                         jarak_tempuh = km_akhir - mobil["KM_Terakhir"]
                         
-                        # Cari baris aktif di Log_Aktivitas untuk diisi KM Akhirnya
+                        # Cari baris aktif di Log_Aktivitas
                         df_log = conn.read(worksheet="Log_Aktivitas", ttl="0s")
-                        idx = df_log[(df_log['ID_Mobil'] == id_mobil_terdeteksi) & (df_log['KM_Akhir'] == "-")].index
+                        df_log['KM_Akhir'] = df_log['KM_Akhir'].fillna("").astype(str).str.strip()
+                        
+                        idx = df_log[(df_log['ID_Mobil'] == id_mobil_terdeteksi) & ((df_log['KM_Akhir'] == "") | (df_log['KM_Akhir'] == "-"))].index
+                        
                         if not idx.empty:
-                            df_log.loc[idx, ['KM_Akhir', 'Waktu_Selesai', 'Total_Jarak']] = [km_akhir, waktu_selesai, jarak_tempuh]
+                            df_log.loc[idx, ['KM_Akhir', 'Waktu_Selesai', 'Total_Jarak']] = [str(int(km_akhir)), waktu_selesai, str(int(jarak_tempuh))]
                             conn.update(worksheet="Log_Aktivitas", data=df_log)
                         
                         # Kembalikan status mobil di Tab Status_Mobil menjadi "Tersedia"
                         df_mobil_reset = df_mobil.reset_index()
-                        df_mobil_reset.loc[df_mobil_reset['ID_Mobil'] == id_mobil_terdeteksi, ['Status', 'Driver_Sekarang', 'KM_Terakhir']] = ["Tersedia", "-", km_akhir]
+                        df_mobil_reset.loc[df_mobil_reset['ID_Mobil'] == id_mobil_terdeteksi, ['Status', 'Driver_Sekarang', 'KM_Terakhir']] = ["Tersedia", "-", int(km_akhir)]
                         conn.update(worksheet="Status_Mobil", data=df_mobil_reset)
                         
                         st.balloons()
