@@ -45,8 +45,9 @@ try:
                         new_log = pd.DataFrame([{
                             "Timestamp": waktu_mulai, "ID_Mobil": id_mobil_terdeteksi, "Nama_Driver": nama_driver,
                             "Tujuan": tujuan, "KM_Awal": km_awal, "Waktu_Mulai": waktu_mulai,
-                            "KM_Akhir": "-", "Waktu_Selesai": "-", "Total_Jarak": "-"
+                            "KM_Akhir": "", "Waktu_Selesai": "", "Total_Jarak": ""
                         }])
+                        df_log['KM_Akhir'] = df_log['KM_Akhir'].astype(str)
                         df_log_updated = pd.concat([df_log, new_log], ignore_index=True)
                         conn.update(worksheet="Log_Aktivitas", data=df_log_updated)
                         
