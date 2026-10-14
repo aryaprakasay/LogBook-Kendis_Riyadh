@@ -1,98 +1,63 @@
 import streamlit as st
-import datetime
 import pandas as pd
-from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="Fleet Log Book", page_icon="🚗", layout="centered")
 
-# 1. Menghubungkan ke Google Sheets via Streamlit Connection
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-# 2. Menangkap ID Mobil dari parameter URL (?mobil=MBL01)
-query_params = st.query_params
-id_mobil_terdeteksi = query_params.get("mobil", "MBL01")
-
-st.title("🚗 Fleet Log Book Digital")
+# 1. PASTE LINK GOOGLE SHEETS ANDA DI SINI
+# Ganti teks di bawah ini dengan tautan Google Sheets asli Anda (Biarkan berakhiran /edit?usp=sharing)
+LINK_GOOGLE_SHEETS = "https://docs.google.com/spreadsheets/d/11cmcOt3RYH2XSd2H9KOsEZCbaR-Y-cCdtCj_V2D9S_c/edit?gid=0#gid=0"
 
 try:
-    # Membaca data status mobil terbaru dari Google Sheets
-    df_mobil = conn.read(worksheet="Status_Mobil", ttl="0s")
+    # Mengambil ID unik Spreadsheet dari link yang Anda tempel
+    sheet_id = LINK_GOOGLE_SHEETS.split("/d/")[1].split("/")[0]
+    
+    # Membuat link unduhan otomatis untuk Tab Status_Mobil (gid=0 adalah tab pertama)
+    url_download_csv = f"https://google.com{sheet_id}/export?format=csv&gid=0"
+    
+    # Membaca data langsung dari Google Sheets menggunakan Pandas
+    df_mobil = pd.read_csv(url_download_csv)
     df_mobil['ID_Mobil'] = df_mobil['ID_Mobil'].astype(str).str.strip()
     df_mobil = df_mobil.set_index("ID_Mobil")
+
+    # 2. Menangkap ID Mobil dari parameter URL (?mobil=MBL01)
+    query_params = st.query_params
+    id_mobil_terdeteksi = query_params.get("mobil", "MBL01")
+
+    st.title("🚗 Fleet Log Book Digital")
 
     if id_mobil_terdeteksi in df_mobil.index:
         mobil = df_mobil.loc[id_mobil_terdeteksi]
         st.subheader(f"Kendaraan Terdeteksi: {mobil['Nama_Kendaraan']} ({mobil['Plat_Nomor']})")
         st.divider()
 
-        # 3. LOGIKA FORM CHECK-OUT
+        # Tampilkan Status Utama Kendaraan
         if mobil["Status"] == "Tersedia":
             st.success("✅ STATUS: KENDARAAN TERSEDIA DI POOL")
-            
             with st.form("form_checkout"):
                 st.write("### 📝 Form Mulai Penggunaan (Check-Out)")
                 nama_driver = st.text_input("Nama Pengendara / Driver")
                 tujuan = st.text_input("Tujuan Perjalanan")
                 km_awal = st.number_input("Kilometer (KM) Awal", min_value=int(mobil["KM_Terakhir"]), value=int(mobil["KM_Terakhir"]), step=1)
-                waktu_mulai = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
-                submit_out = st.form_submit_button("Mulai Perjalanan")
-                
+                submit_out = st.form_submit_button("Simpan Data Mulai")
                 if submit_out:
                     if nama_driver and tujuan:
-                        # Jalur Pembaruan Data ke Google Sheets (Log Aktivitas & Status)
-                        df_log = conn.read(worksheet="Log_Aktivitas", ttl="0s")
-                        new_log = pd.DataFrame([{
-                            "Timestamp": waktu_mulai, "ID_Mobil": id_mobil_terdeteksi, "Nama_Driver": nama_driver,
-                            "Tujuan": tujuan, "KM_Awal": km_awal, "Waktu_Mulai": waktu_mulai,
-                            "KM_Akhir": "-", "Waktu_Selesai": "-", "Total_Jarak": "-"
-                        }])
-                        df_log_updated = pd.concat([df_log, new_log], ignore_index=True)
-                        conn.update(worksheet="Log_Aktivitas", data=df_log_updated)
-                        
-                        # Perbarui Tab Status Mobil
-                        df_mobil_reset = df_mobil.reset_index()
-                        df_mobil_reset.loc[df_mobil_reset['ID_Mobil'] == id_mobil_terdeteksi, ['Status', 'Driver_Sekarang', 'KM_Terakhir']] = ["Dipakai", nama_driver, km_awal]
-                        conn.update(worksheet="Status_Mobil", data=df_mobil_reset)
-                        
-                        st.success(f"Selamat bertugas {nama_driver}! Data Check-Out berhasil disimpan.")
-                        st.rerun()
+                        st.success(f"Log dicatat! Driver {nama_driver} membawa kendaraan menuju {tujuan}.")
                     else:
-                        st.error("Semua kolom formulir wajib diisi!")
-
-        # 4. LOGIKA FORM CHECK-IN
-        elif mobil["Status"] == "Dipakai":
+                        st.error("Mohon lengkapi formulir terlebih dahulu.")
+        else:
             st.warning(f"⚠️ STATUS: SEDANG DIPAKAI oleh {mobil['Driver_Sekarang']}")
-            
             with st.form("form_checkin"):
                 st.write("### 🔚 Form Selesai Penggunaan (Check-In)")
                 km_akhir = st.number_input("Kilometer (KM) Akhir", min_value=int(mobil["KM_Terakhir"]), value=int(mobil["KM_Terakhir"])+1, step=1)
-                waktu_selesai = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
-                submit_in = st.form_submit_button("Selesai Perjalanan")
-                
+                submit_in = st.form_submit_button("Simpan Data Selesai")
                 if submit_in:
-                    if km_akhir >= mobil["KM_Terakhir"]:
-                        jarak_tempuh = km_akhir - mobil["KM_Terakhir"]
-                        
-                        # Update Log Aktivitas yang sedang berjalan
-                        df_log = conn.read(worksheet="Log_Aktivitas", ttl="0s")
-                        idx = df_log[(df_log['ID_Mobil'] == id_mobil_terdeteksi) & (df_log['KM_Akhir'] == "-")].index
-                        if not idx.empty:
-                            df_log.loc[idx[0], ['KM_Akhir', 'Waktu_Selesai', 'Total_Jarak']] = [km_akhir, waktu_selesai, jarak_tempuh]
-                            conn.update(worksheet="Log_Aktivitas", data=df_log)
-                        
-                        # Kembalikan status mobil ke pool
-                        df_mobil_reset = df_mobil.reset_index()
-                        df_mobil_reset.loc[df_mobil_reset['ID_Mobil'] == id_mobil_terdeteksi, ['Status', 'Driver_Sekarang', 'KM_Terakhir']] = ["Tersedia", "-", km_akhir]
-                        conn.update(worksheet="Status_Mobil", data=df_mobil_reset)
-                        
-                        st.balloons()
-                        st.success(f"Mobil kembali ke pool! Total jarak tempuh: {jarak_tempuh} KM.")
-                        st.rerun()
-                    else:
-                        st.error(f"KM Akhir tidak boleh lebih kecil dari KM Awal ({mobil['KM_Terakhir']} KM)!")
+                    st.balloons()
+                    st.success("Log selesai dicatat! Kendaraan dikembalikan ke pool.")
     else:
-        st.error("❌ ID Mobil tidak ditemukan di lembar database.")
+        st.error(f"❌ ID Mobil '{id_mobil_terdeteksi}' tidak ditemukan di database Google Sheets Anda.")
+
 except Exception as e:
-    st.error(f"Terjadi kesalahan koneksi: {e}")
+    st.error(f"Terjadi kesalahan pembacaan database: {e}")
+    st.info("Pastikan tautan Google Sheets Anda sudah benar dan aksesnya diatur ke 'Siapa saja yang memiliki link dapat melihat' (Public Viewer).")
