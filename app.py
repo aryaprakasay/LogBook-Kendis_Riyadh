@@ -2,6 +2,7 @@ import streamlit as st
 import datetime
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
+from zoneinfo import ZoneInfo  # Ditambahkan untuk pengaturan zona waktu Saudi Arabia
 
 st.set_page_config(page_title="Fleet Log Book", page_icon="🚗", layout="centered")
 
@@ -34,7 +35,9 @@ try:
                 nama_driver = st.text_input("Nama Pengendara / Driver")
                 tujuan = st.text_input("Tujuan Perjalanan")
                 km_awal = st.number_input("Kilometer (KM) Awal", min_value=int(mobil["KM_Terakhir"]), value=int(mobil["KM_Terakhir"]), step=1)
-                waktu_mulai = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
+                # Menggunakan Waktu Resmi Arab Saudi (GMT+3)
+                waktu_mulai = datetime.datetime.now(ZoneInfo("Asia/Riyadh")).strftime("%Y-%m-%d %H:%M:%S")
                 
                 submit_out = st.form_submit_button("Simpan & Mulai Perjalanan")
                 
@@ -58,7 +61,7 @@ try:
                         df_mobil_reset.loc[df_mobil_reset['ID_Mobil'] == id_mobil_terdeteksi, ['Status', 'Driver_Sekarang', 'KM_Terakhir']] = ["Dipakai", nama_driver, int(km_awal)]
                         conn.update(worksheet="Status_Mobil", data=df_mobil_reset)
                         
-                        st.success(f"Berhasil! Selamat bertugas {nama_driver}. Data disimpan ke Google Sheets.")
+                        st.success(f"Berhasil! Data Check-Out disimpan ke Google Sheets (Waktu KSA).")
                         st.rerun()
                     else:
                         st.error("Semua kolom formulir wajib diisi!")
@@ -70,7 +73,9 @@ try:
             with st.form("form_checkin"):
                 st.write("### 🔚 Form Selesai Penggunaan (Check-In)")
                 km_akhir = st.number_input("Kilometer (KM) Akhir", min_value=int(mobil["KM_Terakhir"]), value=int(mobil["KM_Terakhir"])+1, step=1)
-                waktu_selesai = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
+                # Menggunakan Waktu Resmi Arab Saudi (GMT+3)
+                waktu_selesai = datetime.datetime.now(ZoneInfo("Asia/Riyadh")).strftime("%Y-%m-%d %H:%M:%S")
                 
                 submit_in = st.form_submit_button("Simpan & Selesai Perjalanan")
                 
@@ -94,7 +99,7 @@ try:
                         conn.update(worksheet="Status_Mobil", data=df_mobil_reset)
                         
                         st.balloons()
-                        st.success(f"Berhasil! Mobil kembali ke pool. Total jarak tempuh: {jarak_tempuh} KM.")
+                        st.success(f"Berhasil! Data Check-In disimpan ke Google Sheets (Waktu KSA).")
                         st.rerun()
                     else:
                         st.error(f"KM Akhir tidak boleh lebih kecil dari KM Awal ({mobil['KM_Terakhir']} KM)!")
