@@ -11,7 +11,6 @@ st.set_page_config(page_title="Log Book Kendis KBRI Riyadh", page_icon="🚗", l
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # 3. Menangkap ID Mobil dari parameter URL (?mobil=MBL01)
-# Diubah agar default-nya None jika tidak ada parameter, sehingga otomatis lari ke Halaman Dashboard
 query_params = st.query_params
 id_mobil_terdeteksi = query_params.get("mobil", None)
 
@@ -54,7 +53,8 @@ try:
         # Mengambil informasi tujuan dari Tab Log_Aktivitas secara real-time
         try:
             df_log = conn.read(worksheet="Log_Aktivitas", ttl="0s")
-            df_active_logs = df_log[df_log['KM_Akhir'].isna() | (df_log['KM_Akhir'] == "") | (df_log['KM_Akhir'] == "-")]
+            km_akhir_series = pd.to_numeric(df_log['KM_Akhir'], errors='coerce')
+            df_active_logs = df_log[km_akhir_series.isna()]
             df_active_logs = df_active_logs.drop_duplicates(subset=['ID_Mobil'], keep='last')
             
             tujuan_map = dict(zip(df_active_logs['ID_Mobil'].astype(str).str.strip(), df_active_logs['Tujuan']))
@@ -62,21 +62,31 @@ try:
         except:
             df_display['Tujuan_Perjalanan'] = "-"
 
-        # Memilih dan menyusun urutan kolom agar rapi di dashboard
-        df_display = df_display[['ID_Mobil', 'Nama_Kendaraan', 'Plat_Nomor', 'Status', 'Driver_Sekarang', 'Tujuan_Perjalanan', 'KM_Terakhir']]
-        df_display.columns = ["ID", "Nama Kendaraan", "Plat Nomor", "Status Terkini", "Supir Sekarang", "Tujuan Perjalanan", "KM Terakhir"]
+        # Memilih kolom-kolom yang mau ditampilkan (ID_Mobil DIHAPUS)
+        df_display = df_display[['Nama_Kendaraan', 'Plat_Nomor', 'Status', 'Driver_Sekarang', 'Tujuan_Perjalanan', 'KM_Terakhir']]
+        df_display.columns = ["Nama Kendaraan", "Plat Nomor", "Status Terkini", "Supir Sekarang", "Tujuan Perjalanan", "KM Terakhir"]
+
+        # 🔧 Mengubah nilai pecahan langsung di tingkat tabel data menjadi Integer murni
+        df_display["KM Terakhir"] = pd.to_numeric(df_display["KM Terakhir"], errors='coerce').fillna(0).astype(int)
 
         # Menjalankan filter berdasarkan pilihan box admin
         if filter_status != "Semua Kendaraan":
             df_display = df_display[df_display['Status Terkini'].str.strip() == filter_status]
 
-        # --- D. TAMPILKAN TABEL UTAMA TANPA SCROLL ---
-        # Menggunakan st.table agar otomatis memanjang ke bawah menampilkan seluruh 24 baris mobil sekaligus
-        st.table(df_display)
+        # --- D. TAMPILKAN TABEL UTAMA TANPA SCROLL & TANPA DESIMAL ---
+        # Format '{:d}' memaksa cetak data murni sebagai integer tanpa desimal HTML
+        html_table = (
+            df_display.style
+            .format({"KM Terakhir": "{:d}"})
+            .hide(axis="index")
+            .to_html()
+        )
+        
+        st.write(html_table, unsafe_allow_html=True)
+        st.write("")
         
         if st.button("🔄 Segarkan Data Dashboard"):
             st.rerun()
-
     # ==============================================================================
     # 📱 HALAMAN LOG BOOK DRIVER (Jika mendeteksi kode mobil dari QR Code / URL)
     # ==============================================================================
@@ -86,8 +96,8 @@ try:
         if id_mobil_terdeteksi in df_mobil_form.index:
             mobil = df_mobil_form.loc[id_mobil_terdeteksi]
             
-            # Agar form pengisian supir di HP terlihat rapi di tengah layar (tidak terlalu melar ke samping)
-            _, center_col, _ = st.columns([1, 4, 1])
+            # Menggunakan proporsi layout kolom agar presisi di tengah layar
+            _, center_col, _ = st.columns([1, 2, 1])
             with center_col:
                 st.title("🚗 Log Book Kendis KBRI Riyadh")
                 st.subheader(f"Kendaraan Terdeteksi: {mobil['Nama_Kendaraan']} ({mobil['Plat_Nomor']})")
@@ -101,7 +111,7 @@ try:
                         st.write("### 📝 Form Mulai Penggunaan (Check-Out)")
                         nama_driver = st.text_input("Nama Pengendara / Driver")
                         tujuan = st.text_input("Tujuan Perjalanan")
-                        km_awal = st.number_input("Kilometer (KM) Awal", min_value=0, value=int(mobil["KM_Terakhir"]), step=1)
+                        km_awal = st.number_input("Kilometer (KM) Awal", min_value=0, value=int(pd.to_numeric(mobil['KM_Terakhir'], errors='coerce').fillna(0)), step=1)
                         waktu_mulai = datetime.datetime.now(ZoneInfo("Asia/Riyadh")).strftime("%Y-%m-%d %H:%M:%S")
                         
                         submit_out = st.form_submit_button("Simpan & Mulai Perjalanan")
@@ -132,22 +142,25 @@ try:
                     
                     with st.form("form_checkin"):
                         st.write("### 🔚 Form Selesai Penggunaan (Check-In)")
-                        km_akhir = st.number_input("Kilometer (KM) Akhir", min_value=0, value=int(mobil["KM_Terakhir"])+1, step=1)
+                        km_akhir = st.number_input("Kilometer (KM) Akhir", min_value=0, value=int(pd.to_numeric(mobil['KM_Terakhir'], errors='coerce').fillna(0))+1, step=1)
                         waktu_selesai = datetime.datetime.now(ZoneInfo("Asia/Riyadh")).strftime("%Y-%m-%d %H:%M:%S")
                         
                         submit_in = st.form_submit_button("Simpan & Selesai Perjalanan")
                         
                         if submit_in:
-                            if km_akhir >= mobil["KM_Terakhir"]:
-                                jarak_tempuh = km_akhir - mobil["KM_Terakhir"]
+                            km_terakhir_val = int(pd.to_numeric(mobil['KM_Terakhir'], errors='coerce').fillna(0))
+                            if km_akhir >= km_terakhir_val:
+                                jarak_tempuh = km_akhir - km_terakhir_val
                                 df_log = conn.read(worksheet="Log_Aktivitas", ttl="0s")
-                                idx = df_log[(df_log['ID_Mobil'] == id_mobil_terdeteksi) & (df_log['KM_Akhir'].isna() | (df_log['KM_Akhir'] == "") | (df_log['KM_Akhir'] == "-"))].index
+                                
+                                target_km_akhir = pd.to_numeric(df_log['KM_Akhir'], errors='coerce')
+                                idx = df_log[(df_log['ID_Mobil'] == id_mobil_terdeteksi) & (target_km_akhir.isna())].index
                                 
                                 if not idx.empty:
                                     df_log = df_log.astype(object)
-                                    df_log.loc[idx[0], 'KM_Akhir'] = int(km_akhir)
-                                    df_log.loc[idx[0], 'Waktu_Selesai'] = waktu_selesai
-                                    df_log.loc[idx[0], 'Total_Jarak'] = int(jarak_tempuh)
+                                    df_log.loc[idx, 'KM_Akhir'] = int(km_akhir)
+                                    df_log.loc[idx, 'Waktu_Selesai'] = waktu_selesai
+                                    df_log.loc[idx, 'Total_Jarak'] = int(jarak_tempuh)
                                     conn.update(worksheet="Log_Aktivitas", data=df_log)
                                 
                                 df_mobil_reset = df_mobil_form.reset_index()
@@ -158,7 +171,7 @@ try:
                                 st.success(f"Berhasil! Data Check-In disimpan ke Google Sheets (Waktu KSA).")
                                 st.rerun()
                             else:
-                                st.error(f"KM Akhir tidak boleh lebih kecil dari KM Awal ({mobil['KM_Terakhir']} KM)!")
+                                st.error(f"KM Akhir tidak boleh lebih kecil dari KM Awal ({km_terakhir_val} KM)!")
         else:
             st.error(f"❌ ID Mobil '{id_mobil_terdeteksi}' tidak ditemukan di database Google Sheets.")
 except Exception as e:
