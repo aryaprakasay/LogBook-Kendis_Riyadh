@@ -28,7 +28,7 @@ try:
 
         # 3. LOGIKA FORM CHECK-OUT (MULAI PERJALANAN)
         if str(mobil["Status"]).strip() == "Tersedia":
-            st.success("✅ STATUS: KENDARAAN TERSEDIA DI POOL")
+            st.success("✅ STATUS: KENDARAAN TERSEDIA DI KBRI")
             
             with st.form("form_checkout"):
                 st.write("### 📝 Form Mulai Penggunaan (Check-Out)")
