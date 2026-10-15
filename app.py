@@ -53,8 +53,10 @@ try:
         # Mengambil informasi tujuan dari Tab Log_Aktivitas secara real-time
         try:
             df_log = conn.read(worksheet="Log_Aktivitas", ttl="0s")
-            km_akhir_series = pd.to_numeric(df_log['KM_Akhir'], errors='coerce')
-            df_active_logs = df_log[km_akhir_series.isna()]
+            
+            # Deteksi baris kosong secara aman pada tingkat string
+            log_km_akhir = df_log['KM_Akhir'].astype(str).str.strip().replace(['nan', 'None', '-'], '')
+            df_active_logs = df_log[log_km_akhir == '']
             df_active_logs = df_active_logs.drop_duplicates(subset=['ID_Mobil'], keep='last')
             
             tujuan_map = dict(zip(df_active_logs['ID_Mobil'].astype(str).str.strip(), df_active_logs['Tujuan']))
@@ -151,18 +153,18 @@ try:
                         
                         if submit_in:
                             if km_akhir >= km_terakhir_bersih:
-                                # 🔧 PERBAIKAN DI BARIS INI: Rumus disederhanakan murni menjadi rumus hitung angka tunggal
                                 jarak_tempuh = km_akhir - km_terakhir_bersih
                                 df_log = conn.read(worksheet="Log_Aktivitas", ttl="0s")
                                 
-                                target_km_akhir = pd.to_numeric(df_log['KM_Akhir'], errors='coerce')
-                                idx = df_log[(df_log['ID_Mobil'] == id_mobil_terdeteksi) & (target_km_akhir.isna())].index
+                                # 🔧 SOLUSI UTAMA: Paksa konversi kolom menjadi string teks bersih untuk mencari baris aktif secara akurat
+                                check_km_string = df_log['KM_Akhir'].astype(str).str.strip().replace(['nan', 'None', '-'], '')
+                                idx = df_log[(df_log['ID_Mobil'] == id_mobil_terdeteksi) & (check_km_string == '')].index
                                 
                                 if not idx.empty:
                                     df_log = df_log.astype(object)
-                                    df_log.loc[idx, 'KM_Akhir'] = int(km_akhir)
-                                    df_log.loc[idx, 'Waktu_Selesai'] = waktu_selesai
-                                    df_log.loc[idx, 'Total_Jarak'] = int(jarak_tempuh)
+                                    df_log.loc[idx[0], 'KM_Akhir'] = int(km_akhir)
+                                    df_log.loc[idx[0], 'Waktu_Selesai'] = waktu_selesai
+                                    df_log.loc[idx[0], 'Total_Jarak'] = int(jarak_tempuh)
                                     conn.update(worksheet="Log_Aktivitas", data=df_log)
                                 
                                 df_mobil_reset = df_mobil_form.reset_index()
