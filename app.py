@@ -96,7 +96,7 @@ try:
             mobil = df_mobil_form.loc[id_mobil_terdeteksi]
             
             # Menggunakan proporsi layout kolom agar presisi di tengah layar
-            _, center_col, _ = st.columns([1, 2, 1])
+            _, center_col, _ = st.columns(3)
             with center_col:
                 st.title("🚗 Log Book Kendis KBRI Riyadh")
                 st.subheader(f"Kendaraan Terdeteksi: {mobil['Nama_Kendaraan']} ({mobil['Plat_Nomor']})")
@@ -151,7 +151,8 @@ try:
                         
                         if submit_in:
                             if km_akhir >= km_terakhir_bersih:
-                                jarak_tempuh = km_akhir - km_terakhir_clean = km_terakhir_bersih
+                                # 🔧 PERBAIKAN DI BARIS INI: Rumus disederhanakan murni menjadi rumus hitung angka tunggal
+                                jarak_tempuh = km_akhir - km_terakhir_bersih
                                 df_log = conn.read(worksheet="Log_Aktivitas", ttl="0s")
                                 
                                 target_km_akhir = pd.to_numeric(df_log['KM_Akhir'], errors='coerce')
@@ -172,7 +173,7 @@ try:
                                 st.success(f"Berhasil! Data Check-In disimpan.")
                                 st.rerun()
                             else:
-                                st.error(f"KM Akhir tidak boleh lebih kecil dari KM Awal ({km_terakhir_val} KM)!")
+                                st.error(f"KM Akhir tidak boleh lebih kecil dari KM Awal ({km_terakhir_bersih} KM)!")
         else:
             st.error(f"❌ ID Mobil '{id_mobil_terdeteksi}' tidak ditemukan di database Google Sheets.")
 except Exception as e:
