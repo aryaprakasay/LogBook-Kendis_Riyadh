@@ -22,7 +22,7 @@ try:
     # 📊 HALAMAN DASBOR UTAMA ADMIN (Jika tidak ada mobil yang di-scan via URL/QR)
     # ==============================================================================
     if id_mobil_terdeteksi is None:
-        st.title("📊 Fleet Monitor Dashboard")
+        st.title("📊 Dashboard Monitor Kendis KBRI Riyadh")
         st.subheader("Ringkasan dan Status Real-Time Armada Kendaraan")
         st.divider()
 
