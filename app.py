@@ -7,22 +7,21 @@ from zoneinfo import ZoneInfo
 # 1. Mengatur konfigurasi awal halaman agar mendukung tampilan lebar
 st.set_page_config(page_title="Log Book Kendis KBRI Riyadh", page_icon="🚗", layout="wide")
 
-# 2. Menghubungkan ke Google Sheets (Hanya digunakan untuk fungsi Menulis Balik/Update)
+# 2. Menghubungkan ke Google Sheets melalui Jalur Koneksi Resmi Streamlit
 conn = st.connection("gsheets", type=GSheetsConnection)
-
-# ID Google Sheets Anda untuk penarikan data berbasis Pandas CSV aman
-ID_SHEET = "11cmcOt3RYH2XSd2H9KOsEZCbaR-Y-cCdtCj_V2D9S_c"
-URL_STATUS_CSV = f"https://google.com{ID_SHEET}/export?format=csv&gid=0"
-URL_LOG_CSV = f"https://google.com{ID_SHEET}/export?format=csv&gid=1114515513"
 
 # 3. Menangkap ID Mobil dari parameter URL (?mobil=MBL01)
 query_params = st.query_params
 id_mobil_terdeteksi = query_params.get("mobil", None)
 
 try:
-    # 🔧 SOLUSI UTAMA: Membaca tabel Status_Mobil menggunakan Pandas CSV agar terbebas dari bug internal gsheets fillna
-    df_mobil = pd.read_csv(URL_STATUS_CSV)
-    df_mobil['ID_Mobil'] = df_mobil['ID_Mobil'].astype(str).str.strip()
+    # Membaca data status mobil secara real-time dari Google Sheets
+    df_mobil_raw = conn.read(worksheet="Status_Mobil", ttl="0s")
+    
+    # 🔧 SOLUSI UTAMA: Paksa konversi seluruh tabel data mentah menjadi String teks universal
+    # Langkah ini menjamin tidak akan pernah ada bug tipe data float64/fillna dari internal gsheets
+    df_mobil = df_mobil_raw.astype(str).copy()
+    df_mobil['ID_Mobil'] = df_mobil['ID_Mobil'].str.strip()
 
     # ==============================================================================
     # 📊 HALAMAN DASBOR UTAMA ADMIN (Jika link utama diakses tanpa ?mobil=...)
@@ -34,8 +33,8 @@ try:
 
         # --- A. LOGIKA HITUNG RINGKASAN DATA ---
         total_mobil = len(df_mobil)
-        mobil_tersedia = len(df_mobil[df_mobil['Status'].astype(str).str.strip() == 'Tersedia'])
-        mobil_dipakai = len(df_mobil[df_mobil['Status'].astype(str).str.strip() == 'Dipakai'])
+        mobil_tersedia = len(df_mobil[df_mobil['Status'].str.strip() == 'Tersedia'])
+        mobil_dipakai = len(df_mobil[df_mobil['Status'].str.strip() == 'Dipakai'])
 
         # --- B. TAMPILKAN METRIK RINGKASAN DI BAGIAN ATAS ---
         col1, col2, col3 = st.columns(3)
@@ -55,14 +54,17 @@ try:
         # Salinan data untuk dimodifikasi sebelum ditampilkan
         df_display = df_mobil.copy()
         
-        # Mengambil informasi tujuan dari Tab Log_Aktivitas secara real-time via CSV
+        # Mengambil informasi tujuan dari Tab Log_Aktivitas secara real-time
         try:
-            df_log = pd.read_csv(URL_LOG_CSV)
-            log_km_akhir = df_log['KM_Akhir'].astype(str).str.strip().replace(['nan', 'None', '-', '0.0'], '')
+            df_log_raw = conn.read(worksheet="Log_Aktivitas", ttl="0s")
+            df_log = df_log_raw.astype(str).copy()
+            
+            # Deteksi baris aktif secara aman menggunakan string kosong
+            log_km_akhir = df_log['KM_Akhir'].str.strip().replace(['nan', 'None', '-', '0.0', '0'], '')
             df_active_logs = df_log[log_km_akhir == '']
             df_active_logs = df_active_logs.drop_duplicates(subset=['ID_Mobil'], keep='last')
             
-            tujuan_map = dict(zip(df_active_logs['ID_Mobil'].astype(str).str.strip(), df_active_logs['Tujuan']))
+            tujuan_map = dict(zip(df_active_logs['ID_Mobil'].str.strip(), df_active_logs['Tujuan']))
             df_display['Tujuan_Perjalanan'] = df_display['ID_Mobil'].map(tujuan_map).fillna("-")
         except:
             df_display['Tujuan_Perjalanan'] = "-"
@@ -71,12 +73,12 @@ try:
         df_display = df_display[['Nama_Kendaraan', 'Plat_Nomor', 'Status', 'Driver_Sekarang', 'Tujuan_Perjalanan', 'KM_Terakhir']]
         df_display.columns = ["Nama Kendaraan", "Plat Nomor", "Status Terkini", "Supir Sekarang", "Tujuan Perjalanan", "KM Terakhir"]
 
-        # Mengubah nilai pecahan langsung di tingkat tabel data menjadi Integer murni
+        # Mengubah nilai teks KM Terakhir menjadi Integer murni untuk visualisasi table
         df_display["KM Terakhir"] = pd.to_numeric(df_display["KM Terakhir"], errors='coerce').fillna(0).astype(int)
 
         # Menjalankan filter berdasarkan pilihan box admin
         if filter_status != "Semua Kendaraan":
-            df_display = df_display[df_display['Status Terkini'].astype(str).str.strip() == filter_status]
+            df_display = df_display[df_display['Status Terkini'].str.strip() == filter_status]
 
         # --- D. TAMPILKAN TABEL UTAMA TANPA SCROLL & TANPA DESIMAL ---
         html_table = (
@@ -101,13 +103,13 @@ try:
             mobil = df_mobil_form.loc[id_mobil_terdeteksi]
             
             # Menggunakan proporsi layout kolom agar presisi di tengah layar
-            _, center_col, _ = st.columns([1, 2, 1])
+            _, center_col, _ = st.columns(3)
             with center_col:
                 st.title("🚗 Log Book Kendis KBRI Riyadh")
                 st.subheader(f"Kendaraan Terdeteksi: {mobil['Nama_Kendaraan']} ({mobil['Plat_Nomor']})")
                 st.divider()
 
-                # Konversi nilai KM Terakhir secara aman menggunakan metode float-to-integer murni
+                # Konversi nilai KM Terakhir secara aman dari bentuk teks murni ke angka bulat
                 km_terakhir_bersih = int(float(pd.to_numeric(mobil['KM_Terakhir'], errors='coerce').fillna(0)))
 
                 # --- 3. LOGIKA FORM CHECK-OUT (MULAI PERJALANAN) ---
@@ -125,7 +127,6 @@ try:
                         
                         if submit_out:
                             if nama_driver and tujuan:
-                                # Baca lembar aktivitas via Service Account untuk ditambahkan barisnya
                                 df_log = conn.read(worksheet="Log_Aktivitas", ttl="0s")
                                 new_log = pd.DataFrame([{
                                     "Timestamp": waktu_mulai, "ID_Mobil": id_mobil_terdeteksi, "Nama_Driver": nama_driver,
@@ -160,15 +161,15 @@ try:
                                 jarak_tempuh = km_akhir - km_terakhir_bersih
                                 df_log = conn.read(worksheet="Log_Aktivitas", ttl="0s")
                                 
-                                # Mengubah kolom KM_Akhir menjadi bentuk string sebelum memproses filter indeks
-                                check_km_string = df_log['KM_Akhir'].astype(str).str.strip().replace(['nan', 'None', '-', '0.0'], '')
+                                # Mengubah kolom KM_Akhir menjadi bentuk string sebelum memproses filter indeks secara presisi
+                                check_km_string = df_log['KM_Akhir'].astype(str).str.strip().replace(['nan', 'None', '-', '0.0', '0'], '')
                                 idx = df_log[(df_log['ID_Mobil'] == id_mobil_terdeteksi) & (check_km_string == '')].index
                                 
                                 if not idx.empty:
                                     df_log = df_log.astype(object)
-                                    df_log.loc[idx[0], 'KM_Akhir'] = int(km_akhir)
-                                    df_log.loc[idx[0], 'Waktu_Selesai'] = waktu_selesai
-                                    df_log.loc[idx[0], 'Total_Jarak'] = int(jarak_tempuh)
+                                    df_log.loc[idx, 'KM_Akhir'] = int(km_akhir)
+                                    df_log.loc[idx, 'Waktu_Selesai'] = waktu_selesai
+                                    df_log.loc[idx, 'Total_Jarak'] = int(jarak_tempuh)
                                     conn.update(worksheet="Log_Aktivitas", data=df_log)
                                 
                                 df_mobil_reset = df_mobil_form.reset_index()
