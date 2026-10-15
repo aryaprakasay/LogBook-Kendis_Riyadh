@@ -7,16 +7,21 @@ from zoneinfo import ZoneInfo
 # 1. Mengatur konfigurasi awal halaman agar mendukung tampilan lebar
 st.set_page_config(page_title="Log Book Kendis KBRI Riyadh", page_icon="🚗", layout="wide")
 
-# 2. Menghubungkan ke Google Sheets dengan hak akses tulis (Service Account)
+# 2. Menghubungkan ke Google Sheets (Hanya digunakan untuk fungsi Menulis Balik/Update)
 conn = st.connection("gsheets", type=GSheetsConnection)
+
+# ID Google Sheets Anda untuk penarikan data berbasis Pandas CSV aman
+ID_SHEET = "11cmcOt3RYH2XSd2H9KOsEZCbaR-Y-cCdtCj_V2D9S_c"
+URL_STATUS_CSV = f"https://google.com{ID_SHEET}/export?format=csv&gid=0"
+URL_LOG_CSV = f"https://google.com{ID_SHEET}/export?format=csv&gid=1114515513"
 
 # 3. Menangkap ID Mobil dari parameter URL (?mobil=MBL01)
 query_params = st.query_params
 id_mobil_terdeteksi = query_params.get("mobil", None)
 
 try:
-    # Membaca data status mobil secara real-time dari Google Sheets
-    df_mobil = conn.read(worksheet="Status_Mobil", ttl="0s")
+    # 🔧 SOLUSI UTAMA: Membaca tabel Status_Mobil menggunakan Pandas CSV agar terbebas dari bug internal gsheets fillna
+    df_mobil = pd.read_csv(URL_STATUS_CSV)
     df_mobil['ID_Mobil'] = df_mobil['ID_Mobil'].astype(str).str.strip()
 
     # ==============================================================================
@@ -29,8 +34,8 @@ try:
 
         # --- A. LOGIKA HITUNG RINGKASAN DATA ---
         total_mobil = len(df_mobil)
-        mobil_tersedia = len(df_mobil[df_mobil['Status'].str.strip() == 'Tersedia'])
-        mobil_dipakai = len(df_mobil[df_mobil['Status'].str.strip() == 'Dipakai'])
+        mobil_tersedia = len(df_mobil[df_mobil['Status'].astype(str).str.strip() == 'Tersedia'])
+        mobil_dipakai = len(df_mobil[df_mobil['Status'].astype(str).str.strip() == 'Dipakai'])
 
         # --- B. TAMPILKAN METRIK RINGKASAN DI BAGIAN ATAS ---
         col1, col2, col3 = st.columns(3)
@@ -50,12 +55,10 @@ try:
         # Salinan data untuk dimodifikasi sebelum ditampilkan
         df_display = df_mobil.copy()
         
-        # Mengambil informasi tujuan dari Tab Log_Aktivitas secara real-time
+        # Mengambil informasi tujuan dari Tab Log_Aktivitas secara real-time via CSV
         try:
-            df_log = conn.read(worksheet="Log_Aktivitas", ttl="0s")
-            
-            # Deteksi baris kosong secara aman pada tingkat string
-            log_km_akhir = df_log['KM_Akhir'].astype(str).str.strip().replace(['nan', 'None', '-'], '')
+            df_log = pd.read_csv(URL_LOG_CSV)
+            log_km_akhir = df_log['KM_Akhir'].astype(str).str.strip().replace(['nan', 'None', '-', '0.0'], '')
             df_active_logs = df_log[log_km_akhir == '']
             df_active_logs = df_active_logs.drop_duplicates(subset=['ID_Mobil'], keep='last')
             
@@ -73,7 +76,7 @@ try:
 
         # Menjalankan filter berdasarkan pilihan box admin
         if filter_status != "Semua Kendaraan":
-            df_display = df_display[df_display['Status Terkini'].str.strip() == filter_status]
+            df_display = df_display[df_display['Status Terkini'].astype(str).str.strip() == filter_status]
 
         # --- D. TAMPILKAN TABEL UTAMA TANPA SCROLL & TANPA DESIMAL ---
         html_table = (
@@ -98,7 +101,7 @@ try:
             mobil = df_mobil_form.loc[id_mobil_terdeteksi]
             
             # Menggunakan proporsi layout kolom agar presisi di tengah layar
-            _, center_col, _ = st.columns(3)
+            _, center_col, _ = st.columns([1, 2, 1])
             with center_col:
                 st.title("🚗 Log Book Kendis KBRI Riyadh")
                 st.subheader(f"Kendaraan Terdeteksi: {mobil['Nama_Kendaraan']} ({mobil['Plat_Nomor']})")
@@ -122,6 +125,7 @@ try:
                         
                         if submit_out:
                             if nama_driver and tujuan:
+                                # Baca lembar aktivitas via Service Account untuk ditambahkan barisnya
                                 df_log = conn.read(worksheet="Log_Aktivitas", ttl="0s")
                                 new_log = pd.DataFrame([{
                                     "Timestamp": waktu_mulai, "ID_Mobil": id_mobil_terdeteksi, "Nama_Driver": nama_driver,
@@ -156,8 +160,8 @@ try:
                                 jarak_tempuh = km_akhir - km_terakhir_bersih
                                 df_log = conn.read(worksheet="Log_Aktivitas", ttl="0s")
                                 
-                                # 🔧 SOLUSI UTAMA: Paksa konversi kolom menjadi string teks bersih untuk mencari baris aktif secara akurat
-                                check_km_string = df_log['KM_Akhir'].astype(str).str.strip().replace(['nan', 'None', '-'], '')
+                                # Mengubah kolom KM_Akhir menjadi bentuk string sebelum memproses filter indeks
+                                check_km_string = df_log['KM_Akhir'].astype(str).str.strip().replace(['nan', 'None', '-', '0.0'], '')
                                 idx = df_log[(df_log['ID_Mobil'] == id_mobil_terdeteksi) & (check_km_string == '')].index
                                 
                                 if not idx.empty:
