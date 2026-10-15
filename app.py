@@ -96,7 +96,7 @@ try:
         
         if id_mobil_terdeteksi in df_mobil_form.index:
             mobil = df_mobil_form.loc[id_mobil_terdeteksi]
-            st.title("🚗 Fleet Log Book Digital")
+            st.title("🚗 Log Book Kendis KBRI Riyadh")
             st.subheader(f"Kendaraan Terdeteksi: {mobil['Nama_Kendaraan']} ({mobil['Plat_Nomor']})")
             st.divider()
 
