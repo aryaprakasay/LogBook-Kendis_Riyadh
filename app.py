@@ -66,7 +66,7 @@ try:
         df_display = df_display[['Nama_Kendaraan', 'Plat_Nomor', 'Status', 'Driver_Sekarang', 'Tujuan_Perjalanan', 'KM_Terakhir']]
         df_display.columns = ["Nama Kendaraan", "Plat Nomor", "Status Terkini", "Supir Sekarang", "Tujuan Perjalanan", "KM Terakhir"]
 
-        # 🔧 Mengubah nilai pecahan langsung di tingkat tabel data menjadi Integer murni
+        # Mengubah nilai pecahan langsung di tingkat tabel data menjadi Integer murni
         df_display["KM Terakhir"] = pd.to_numeric(df_display["KM Terakhir"], errors='coerce').fillna(0).astype(int)
 
         # Menjalankan filter berdasarkan pilihan box admin
@@ -74,7 +74,6 @@ try:
             df_display = df_display[df_display['Status Terkini'].str.strip() == filter_status]
 
         # --- D. TAMPILKAN TABEL UTAMA TANPA SCROLL & TANPA DESIMAL ---
-        # Format '{:d}' memaksa cetak data murni sebagai integer tanpa desimal HTML
         html_table = (
             df_display.style
             .format({"KM Terakhir": "{:d}"})
@@ -103,6 +102,9 @@ try:
                 st.subheader(f"Kendaraan Terdeteksi: {mobil['Nama_Kendaraan']} ({mobil['Plat_Nomor']})")
                 st.divider()
 
+                # Konversi nilai KM Terakhir secara aman menggunakan metode float-to-integer murni
+                km_terakhir_bersih = int(float(pd.to_numeric(mobil['KM_Terakhir'], errors='coerce').fillna(0)))
+
                 # --- 3. LOGIKA FORM CHECK-OUT (MULAI PERJALANAN) ---
                 if str(mobil["Status"]).strip() == "Tersedia":
                     st.success("✅ STATUS: KENDARAAN TERSEDIA DI KBRI")
@@ -111,7 +113,7 @@ try:
                         st.write("### 📝 Form Mulai Penggunaan (Check-Out)")
                         nama_driver = st.text_input("Nama Pengendara / Driver")
                         tujuan = st.text_input("Tujuan Perjalanan")
-                        km_awal = st.number_input("Kilometer (KM) Awal", min_value=0, value=int(pd.to_numeric(mobil['KM_Terakhir'], errors='coerce').fillna(0)), step=1)
+                        km_awal = st.number_input("Kilometer (KM) Awal", min_value=0, value=km_terakhir_bersih, step=1)
                         waktu_mulai = datetime.datetime.now(ZoneInfo("Asia/Riyadh")).strftime("%Y-%m-%d %H:%M:%S")
                         
                         submit_out = st.form_submit_button("Simpan & Mulai Perjalanan")
@@ -131,7 +133,7 @@ try:
                                 df_mobil_reset.loc[df_mobil_reset['ID_Mobil'] == id_mobil_terdeteksi, ['Status', 'Driver_Sekarang', 'KM_Terakhir']] = ["Dipakai", nama_driver, int(km_awal)]
                                 conn.update(worksheet="Status_Mobil", data=df_mobil_reset)
                                 
-                                st.success(f"Berhasil! Data Check-Out disimpan ke Google Sheets (Waktu KSA).")
+                                st.success(f"Berhasil! Data Check-Out disimpan.")
                                 st.rerun()
                             else:
                                 st.error("Semua kolom formulir wajib diisi!")
@@ -142,15 +144,14 @@ try:
                     
                     with st.form("form_checkin"):
                         st.write("### 🔚 Form Selesai Penggunaan (Check-In)")
-                        km_akhir = st.number_input("Kilometer (KM) Akhir", min_value=0, value=int(pd.to_numeric(mobil['KM_Terakhir'], errors='coerce').fillna(0))+1, step=1)
+                        km_akhir = st.number_input("Kilometer (KM) Akhir", min_value=0, value=km_terakhir_bersih+1, step=1)
                         waktu_selesai = datetime.datetime.now(ZoneInfo("Asia/Riyadh")).strftime("%Y-%m-%d %H:%M:%S")
                         
                         submit_in = st.form_submit_button("Simpan & Selesai Perjalanan")
                         
                         if submit_in:
-                            km_terakhir_val = int(pd.to_numeric(mobil['KM_Terakhir'], errors='coerce').fillna(0))
-                            if km_akhir >= km_terakhir_val:
-                                jarak_tempuh = km_akhir - km_terakhir_val
+                            if km_akhir >= km_terakhir_bersih:
+                                jarak_tempuh = km_akhir - km_terakhir_clean = km_terakhir_bersih
                                 df_log = conn.read(worksheet="Log_Aktivitas", ttl="0s")
                                 
                                 target_km_akhir = pd.to_numeric(df_log['KM_Akhir'], errors='coerce')
@@ -168,7 +169,7 @@ try:
                                 conn.update(worksheet="Status_Mobil", data=df_mobil_reset)
                                 
                                 st.balloons()
-                                st.success(f"Berhasil! Data Check-In disimpan ke Google Sheets (Waktu KSA).")
+                                st.success(f"Berhasil! Data Check-In disimpan.")
                                 st.rerun()
                             else:
                                 st.error(f"KM Akhir tidak boleh lebih kecil dari KM Awal ({km_terakhir_val} KM)!")
