@@ -90,7 +90,7 @@ try:
             mobil = df_mobil_form.loc[id_mobil_terdeteksi]
             
             # Agar form pengisian supir di HP terlihat rapi di tengah layar (tidak terlalu melar ke samping)
-            _, center_col, _ = st.columns()
+            _, center_col, _ = st.columns([1, 2, 1])
             with center_col:
                 st.title("🚗 Log Book Kendis KBRI Riyadh")
                 st.subheader(f"Kendaraan Terdeteksi: {mobil['Nama_Kendaraan']} ({mobil['Plat_Nomor']})")
