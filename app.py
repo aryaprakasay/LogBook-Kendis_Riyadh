@@ -13,7 +13,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 query_params = st.query_params
 id_mobil_terdeteksi = query_params.get("mobil", "MBL01")
 
-st.title("🚗 Fleet Log Book Digital")
+st.title("🚗 Log Book Kendis KBRI Riyadh")
 
 try:
     # Membaca data status mobil secara real-time dari Google Sheets
